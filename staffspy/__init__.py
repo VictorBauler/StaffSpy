@@ -72,9 +72,9 @@ class LinkedInAccount:
             raise ValueError(
                 "Either company_name, user_id, or school_id must be provided"
             )
-        elif not company_name:
+        elif not company_name and user_id:
             company_name = li_scraper.fetch_user_profile_data_from_public_id(
-                "company_id"
+                user_id=user_id, key="company_id"
             )
 
         staff = li_scraper.scrape_staff(
