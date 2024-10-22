@@ -51,7 +51,7 @@ class LinkedInAccount:
         self,
         company_name: str = None,
         user_id: str = None,
-        school_name: str = None,
+        school_id: str = None,
         search_term: str = None,
         location: str = None,
         extra_profile_data: bool = False,
@@ -60,7 +60,7 @@ class LinkedInAccount:
         """Scrape staff from Linkedin
         company_name - name of company to find staff frame
         user_id - alternative to company_name, fetches the company_name from the user profile
-        school_name - filter for staff that attended a school
+        school_id- filter for staff that attended a school
         search_term - occupation / term to search for at the company
         location - filter for staff at a location
         extra_profile_data - fetches staff's experiences, schools, and mor
@@ -68,9 +68,9 @@ class LinkedInAccount:
         """
         li_scraper = LinkedInScraper(self.session)
 
-        if not company_name and not user_id and not school_name:
+        if not company_name and not user_id and not school_id:
             raise ValueError(
-                "Either company_name, user_id, or school_name must be provided"
+                "Either company_name, user_id, or school_id must be provided"
             )
         elif not company_name:
             company_name = li_scraper.fetch_user_profile_data_from_public_id(
@@ -79,7 +79,7 @@ class LinkedInAccount:
 
         staff = li_scraper.scrape_staff(
             company_name=company_name,
-            school_name=school_name,
+            school_id=school_id,
             extra_profile_data=extra_profile_data,
             search_term=search_term,
             location=location,
