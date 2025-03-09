@@ -27,13 +27,15 @@ from staffspy.utils.utils import logger
 
 
 class LinkedInScraper:
-    employees_ep = "https://www.linkedin.com/voyager/api/graphql?variables=(start:{offset},query:(flagshipSearchIntent:SEARCH_SRP,{search}queryParameters:List({company_id}{location}(key:resultType,value:List(PEOPLE))),includeFiltersInResponse:false),count:{count})&queryId=voyagerSearchDashClusters.66adc6056cf4138949ca5dcb31bb1749"
+
+    employees_ep = "https://www.linkedin.com/voyager/api/graphql?variables=(start:{offset},query:(flagshipSearchIntent:SEARCH_SRP,{search}queryParameters:List({company_search}{school_search}{location}(key:resultType,value:List(PEOPLE))),includeFiltersInResponse:false),count:{count})&queryId=voyagerSearchDashClusters.66adc6056cf4138949ca5dcb31bb1749"
     company_id_ep = "https://www.linkedin.com/voyager/api/organization/companies?q=universalName&universalName="
     company_search_ep = "https://www.linkedin.com/voyager/api/graphql?queryId=voyagerSearchDashClusters.02af3bc8bc85a169bb76bb4805d05759&queryName=SearchClusterCollection&variables=(query:(flagshipSearchIntent:SEARCH_SRP,keywords:{company},includeFiltersInResponse:false,queryParameters:(keywords:List({company}),resultType:List(COMPANIES))),count:10,origin:GLOBAL_SEARCH_HEADER,start:0)"
     location_id_ep = "https://www.linkedin.com/voyager/api/graphql?queryId=voyagerSearchDashReusableTypeahead.57a4fa1dd92d3266ed968fdbab2d7bf5&queryName=SearchReusableTypeaheadByType&variables=(query:(showFullLastNameForConnections:false,typeaheadFilterQuery:(geoSearchTypes:List(MARKET_AREA,COUNTRY_REGION,ADMIN_DIVISION_1,CITY))),keywords:{location},type:GEO,start:0)"
     public_user_id_ep = (
         "https://www.linkedin.com/voyager/api/identity/profiles/{user_id}/profileView"
     )
+
     connections_ep = "https://www.linkedin.com/voyager/api/graphql?queryId=voyagerSearchDashClusters.dfcd3603c2779eddd541f572936f4324&queryName=SearchClusterCollection&variables=(query:(queryParameters:(resultType:List(FOLLOWERS)),flagshipSearchIntent:MYNETWORK_CURATION_HUB,includeFiltersInResponse:true),count:50,origin:CurationHub,start:{offset})"
     block_user_ep = "https://www.linkedin.com/voyager/api/voyagerTrustDashContentReportingForm?action=entityBlock"
     connect_to_user_ep = "https://www.linkedin.com/voyager/api/voyagerRelationshipsDashMemberRelationships?action=verifyQuotaAndCreateV2&decorationId=com.linkedin.voyager.dash.deco.relationships.InvitationCreationResultWithInvitee-1"
@@ -75,6 +77,7 @@ class LinkedInScraper:
                 res.status_code,
                 res.text[:200],
             )
+
         logger.debug(
             f"Searched companies for name '{company_name}' - res code {res.status_code}-"
         )
@@ -204,16 +207,17 @@ class LinkedInScraper:
                 )
         return staff
 
-    def fetch_staff(self, offset: int):
-        """Fetch the staff using LinkedIn search"""
+    def fetch_staff(self, offset, company_id, school_id):
+        """Fetch the staff at the company using LinkedIn search"""
         ep = self.employees_ep.format(
             offset=offset,
-            company_id=(
-                f"(key:currentCompany,value:List({self.company_id})),"
-                if self.company_id
-                else ""
-            ),
-            count=50,
+            company_search=f"(key:currentCompany,value:List({company_id})),"
+            if company_id
+            else "",
+            school_search=f"(key:schoolFilter,value:List({school_id})),"
+            if school_id
+            else "",
+            count=min(50, self.max_results),
             search=f"keywords:{quote(self.search_term)}," if self.search_term else "",
             location=(
                 f"(key:geoUrn,value:List({self.location}))," if self.location else ""
@@ -356,7 +360,8 @@ class LinkedInScraper:
 
     def scrape_staff(
         self,
-        company_name: str | None,
+        company_name: str,
+        school_id: str,
         search_term: str,
         location: str,
         extra_profile_data: bool,
@@ -376,7 +381,16 @@ class LinkedInScraper:
                 company_name
             )
 
+        company_id, staff_count = (
+            self.get_company_id_and_staff_count(company_name)
+            if company_name
+            else (None, None)
+        )
+
         staff_list: list[Staff] = []
+        self.num_staff = (
+            min(staff_count, max_results, 1000) if staff_count else max_results
+        )
 
         if self.raw_location:
             try:
@@ -386,27 +400,22 @@ class LinkedInScraper:
                 return staff_list[:max_results]
 
         try:
-            initial_staff, total_count = self.fetch_staff(0)
-            if initial_staff:
-                staff_list.extend(initial_staff)
-            location = f", location: '{location}'" if location else ""
-            logger.info(
-                f"1) Search results for company: '{company_name}'{location} - {total_count:,} staff"
-            )
-
-            self.num_staff = min(total_count, max_results, 1000)
-            for offset in range(50, self.num_staff, 50):
-                staff, _ = self.fetch_staff(offset)
-                logger.debug(
-                    f"Staff members from search: {len(staff)} new, {len(staff_list) + len(staff)} total"
-                )
+            for offset in range(0, self.num_staff, 50):
+                staff = self.fetch_staff(offset, company_id, school_id)
                 if not staff:
                     break
-                staff_list.extend(staff)
-            location = f", location: '{location}'" if location else ""
-            logger.info(
-                f"2) Total results collected for company: '{company_name}'{location} - {len(staff_list)} results"
-            )
+                staff_list += staff
+            if company_name and school_id:
+                logger.info(
+                    f"Found {len(staff_list)} staff at {company_name} {f'in {location}' if location else ''} that attended {school_id}"
+                )
+            elif company_name:
+                logger.info(
+                    f"Found {len(staff_list)} staff at {company_name} {f'in {location}' if location else ''}"
+                )
+            elif school_id:
+                logger.info(f"Found {len(staff_list)} staff that attended {school_id}")
+
         except (BadCookies, TooManyRequests) as e:
             self.on_block = True
             logger.error(f"Exiting early due to fatal error: {str(e)}")
@@ -418,6 +427,10 @@ class LinkedInScraper:
         )
 
         if extra_profile_data:
+            if school_id:
+                raise ValueError(
+                    "Cannot fetch extra profile data when filtering by school"
+                )
             try:
                 for i, employee in enumerate(non_restricted, start=1):
                     self.fetch_all_info_for_employee(employee, i)

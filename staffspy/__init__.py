@@ -68,21 +68,43 @@ class LinkedInAccount:
     def scrape_staff(
         self,
         company_name: str = None,
+        feature_school_alumni
+        user_id: str = None,
+        school_id: str = None,
         search_term: str = None,
         location: str = None,
         extra_profile_data: bool = False,
         max_results: int = 1000,
         block: bool = False,
         connect: bool = False,
-    ):
+    ) -> pd.DataFrame:
+        """Scrape staff from Linkedin
+        company_name - name of company to find staff frame
+        user_id - alternative to company_name, fetches the company_name from the user profile
+        school_id- filter for staff that attended a school
+        search_term - occupation / term to search for at the company
+        location - filter for staff at a location
+        extra_profile_data - fetches staff's experiences, schools, and mor
+        max_results - amount of results you desire
+        """
+        li_scraper = LinkedInScraper(self.session)
+
+        if not company_name and not user_id and not school_id:
+            raise ValueError(
+                "Either company_name, user_id, or school_id must be provided"
+            )
+        elif not company_name and user_id:
+            company_name = li_scraper.fetch_user_profile_data_from_public_id(
+                user_id=user_id, key="company_id"
+              
         if self.on_block:
             return logger.error(
                 "Account is on cooldown as a safety precaution after receiving a 429 (TooManyRequests) from LinkedIn. Please recreate a new LinkedInAccount to proceed."
             )
-        """Main function entry point to scrape LinkedIn staff"""
-        li_scraper = LinkedInScraper(self.session)
+
         staff = li_scraper.scrape_staff(
             company_name=company_name,
+            school_id=school_id,
             extra_profile_data=extra_profile_data,
             search_term=search_term,
             location=location,
