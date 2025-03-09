@@ -27,7 +27,6 @@ from staffspy.utils.utils import logger
 
 
 class LinkedInScraper:
-
     employees_ep = "https://www.linkedin.com/voyager/api/graphql?variables=(start:{offset},query:(flagshipSearchIntent:SEARCH_SRP,{search}queryParameters:List({company_search}{school_search}{location}(key:resultType,value:List(PEOPLE))),includeFiltersInResponse:false),count:{count})&queryId=voyagerSearchDashClusters.66adc6056cf4138949ca5dcb31bb1749"
     company_id_ep = "https://www.linkedin.com/voyager/api/organization/companies?q=universalName&universalName="
     company_search_ep = "https://www.linkedin.com/voyager/api/graphql?queryId=voyagerSearchDashClusters.02af3bc8bc85a169bb76bb4805d05759&queryName=SearchClusterCollection&variables=(query:(flagshipSearchIntent:SEARCH_SRP,keywords:{company},includeFiltersInResponse:false,queryParameters:(keywords:List({company}),resultType:List(COMPANIES))),count:10,origin:GLOBAL_SEARCH_HEADER,start:0)"
@@ -376,11 +375,6 @@ class LinkedInScraper:
         self.raw_location = location
         self.company_id = None
 
-        if self.company_name:
-            self.company_id, staff_count = self._get_company_id_and_staff_count(
-                company_name
-            )
-
         company_id, staff_count = (
             self.get_company_id_and_staff_count(company_name)
             if company_name
@@ -388,9 +382,6 @@ class LinkedInScraper:
         )
 
         staff_list: list[Staff] = []
-        self.num_staff = (
-            min(staff_count, max_results, 1000) if staff_count else max_results
-        )
 
         if self.raw_location:
             try:
@@ -400,8 +391,15 @@ class LinkedInScraper:
                 return staff_list[:max_results]
 
         try:
-            for offset in range(0, self.num_staff, 50):
-                staff = self.fetch_staff(offset, company_id, school_id)
+            initial_staff, total_count = self.fetch_staff(
+                0, company_id=company_id, school_id=school_id
+            )
+            if initial_staff:
+                staff_list.extend(initial_staff)
+
+            self.num_staff = min(total_count, max_results, 1000)
+            for offset in range(50, self.num_staff, 50):
+                staff, _ = self.fetch_staff(offset, company_id, school_id)
                 if not staff:
                     break
                 staff_list += staff
