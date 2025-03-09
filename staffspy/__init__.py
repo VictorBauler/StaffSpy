@@ -68,7 +68,6 @@ class LinkedInAccount:
     def scrape_staff(
         self,
         company_name: str = None,
-        feature_school_alumni
         user_id: str = None,
         school_id: str = None,
         search_term: str = None,
@@ -96,7 +95,8 @@ class LinkedInAccount:
         elif not company_name and user_id:
             company_name = li_scraper.fetch_user_profile_data_from_public_id(
                 user_id=user_id, key="company_id"
-              
+            )
+
         if self.on_block:
             return logger.error(
                 "Account is on cooldown as a safety precaution after receiving a 429 (TooManyRequests) from LinkedIn. Please recreate a new LinkedInAccount to proceed."
