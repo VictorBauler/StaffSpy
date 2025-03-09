@@ -2,11 +2,14 @@
 
 **StaffSpy** is a staff scraper library for LinkedIn.
 
+_why pay $100/mo for LSN when you could do it for free and get a nice csv to go along with it?_
+
 ## Features
 
 - Scrapes staff from a company on **LinkedIn**
 - Obtains skills, experiences, certifications & more
-- Or fetch individuals users / comments on posts
+- Fetch individuals users / comments on posts
+- Export all your connections with their contact info
 - Aggregates the employees in a Pandas DataFrame
 
 [Video Guide for StaffSpy](https://youtu.be/DNFmjvpZBTs) - _updated for release v0.2.18_
@@ -14,7 +17,13 @@
 ### Installation
 
 ```
-pip install -U staffspy[browser]
+pip install -U "staffspy[browser]"
+```
+
+Or for latest code from this repo directly
+
+```
+pip install "git+https://github.com/cullenwatson/StaffSpy.git#egg=staffspy[browser]"
 ```
 
 _Python version >= [3.10](https://www.python.org/downloads/release/python-3100/) required_
@@ -22,24 +31,14 @@ _Python version >= [3.10](https://www.python.org/downloads/release/python-3100/)
 ### Usage
 
 ```python
-from pathlib import Path
 from staffspy import LinkedInAccount, SolverType, DriverType, BrowserType
 
-session_file = Path(__file__).resolve().parent / "session.pkl"
 account = LinkedInAccount(
-    # commenting these out because 2Captcha is not reliable, so sign in with browser
-    # username="myemail@gmail.com",
-    # password="mypassword",
-    # solver_api_key="your-api-key",
-    # solver_service=SolverType.TWO_CAPTCHA,
-    
-    # if issues with webdriver, specify
-    # driver_type=DriverType(
+    # driver_type=DriverType( # if issues with webdriver, specify its exact location, download link in the FAQ
     #     browser_type=BrowserType.CHROME,
     #     executable_path="/Users/pc/chromedriver-mac-arm64/chromedriver"
     # ),
-
-    session_file=str(session_file), # save login cookies to only log in once (lasts a week or so)
+    session_file="session.pkl", # save login cookies to only log in once (lasts a week or so)
     log_level=1, # 0 for no logs
 )
 
@@ -50,19 +49,34 @@ staff = account.scrape_staff(
     location="london",
     extra_profile_data=True, # fetch all past experiences, schools, & skills
     max_results=50, # can go up to 1000
+    # block=True # if you want to block the user after scraping, to exclude from future search results
+    # connect=True # if you want to connect with the users until you hit your limit
 )
 # or fetch by user ids
 users = account.scrape_users(
     user_ids=['williamhgates', 'rbranson', 'jeffweiner08']
+    # connect=True,
+    # block=True
 )
 
 # fetch all comments on two of Bill Gates' posts 
 comments = account.scrape_comments(
     ['7252421958540091394','7253083989547048961']
 )
+
+# fetch company details
+companies = account.scrape_companies(
+    company_names=['openai', 'microsoft']
+)
+
+# fetch connections (also gets their contact info if available)
+connections = account.scrape_connections(
+    extra_profile_data=True,
+    max_results=50
+)
+
+# export any of the results to csv
 staff.to_csv("staff.csv", index=False)
-users.to_csv("users.csv", index=False)
-comments.to_csv("comments.csv", index=False)
 ```
 
 #### Browser login
@@ -119,10 +133,6 @@ Optional
 |    company identifier on linkedin, will search for that company if that company id does not exist
 |    e.g. openai from https://www.linkedin.com/company/openai
 |
-├── user_id (str):
-|    alternative to company_name, provide user identifier on linkedin, will scrape this user's company
-|    e.g. dougmcmillon from https://www.linkedin.com/in/dougmcmillon
-|
 ├── search_term (str):
 |    staff title to search for
 |    e.g. software engineer
@@ -136,6 +146,12 @@ Optional
 │
 ├── max_results (int):
 |    number of staff to fetch, default/max is 1000 for a search imposed by LinkedIn
+|
+├── block (bool):
+|    whether to block the user after scraping
+|
+├── connect (bool):
+|    whether to conncet with the user after scraping
 ```
 
 ### Parameters for `scrape_users()`
@@ -144,6 +160,12 @@ Optional
 ├── user_ids (list):
 |    user ids to scrape from
 |     e.g. dougmcmillon from https://www.linkedin.com/in/dougmcmillon
+|
+├── block (bool):
+|    whether to block the user after scraping
+|
+├── connect (bool):
+|    whether to conncet with the user after scraping
 ```
 
 
@@ -156,12 +178,61 @@ Optional
 ```
 
 
+### Parameters for `scrape_companies()`
+
+```plaintext
+├── company_names (list):
+|    list of company names to scrape details from
+|     e.g. ['openai', 'microsoft', 'google']
+```
+
+
+### Parameters for `scrape_connections()`
+
+```plaintext
+├── max_results (int):
+|    maximum number of connections to fetch
+|
+├── extra_profile_data (bool):
+|    fetches educations, experiences, skills, certifications & contact info for each connection (Default false)
+```
+
 ### LinkedIn notes
 
     - only 1000 max results per search
     - extra_profile_data increases runtime by O(n)
     - if rate limited, the program will stop scraping
     - if using non-browser sign in, turn off 2fa
+
+---
+
+## Frequently Asked Questions
+
+---
+
+**Q: Can I get my account banned?**  
+**A:** It is a possibility, although there are no recorded incidents. Let me know if you are the first. However, to protect you, the code does not allow you to run it if LinkedIn is blocking you
+
+---
+
+**Q: Scraped 999 staff members, with 869 hidden LinkedIn Members?**  
+**A:** It means your LinkedIn account is bad. Not sure how they classify it but unverified email, new account, low connections and a bunch of factors go into it.
+
+---
+
+**Q: How to get around the 1000 search limit result?**  
+**A:** Check the examples folder. We can block the user after searching and try many different locations and search terms to maximize results.
+
+---
+
+**Q: Exception: driver not found for selenium?**  
+**A:** You need chromedriver installed (not the chrome): https://googlechromelabs.github.io/chrome-for-testing/#stable
+
+---
+
+**Q: Encountering issues with your queries?**  
+**A:** If problems
+persist, [submit an issue](https://github.com/cullenwatson/StaffSpy/issues).
 
 
 ### Staff Schema
@@ -221,32 +292,16 @@ Staff
 │   ├── cert_id
 │   └── cert_link
 │
-└── Educational Background
-    ├── years
-    ├── school
-    └── degree
+├── Educational Background
+|   ├── years
+|   ├── school
+|   └── degree
+│
+└── Connection Info (only when a connection and enabled on their profile)
+    ├── email_address
+    ├── address
+    ├── birthday
+    ├── websites
+    ├── phone_numbers
+    └── created_at
 ```
----
-
-## Frequently Asked Questions
-
----
-
-**Q: Can I get my account banned?**  
-**A:** It is a possibility, although there are no recorded incidents. Let me know if you are the first.
-
----
-
-**Q: Scraped 999 staff members, with 869 hidden LinkedIn Members?**  
-**A:** It means your LinkedIn account is bad. Not sure how they classify it but unverified email, new account, low connections and a bunch of factors go into it.
-
----
-
-**Q: Exception: driver not found for selenium?**  
-**A:** You need chromedriver installed: https://googlechromelabs.github.io/chrome-for-testing/#stable
-
----
-
-**Q: Encountering issues with your queries?**  
-**A:** If problems
-persist, [submit an issue](https://github.com/cullenwatson/StaffSpy/issues).

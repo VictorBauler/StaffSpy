@@ -57,6 +57,25 @@ class Skill(BaseModel):
         }
 
 
+class ContactInfo(BaseModel):
+    email_address: str | None = None
+    websites: list | None = None
+    phone_numbers: list | None = None
+    address: str | None = None
+    birthday: str | None = None
+    created_at: str | None = None
+
+    def to_dict(self):
+        return {
+            "email_address": self.email_address,
+            "websites": self.websites,
+            "phone_numbers": self.phone_numbers,
+            "address": self.address,
+            "birthday": self.birthday,
+            "created_at": self.created_at,
+        }
+
+
 class Certification(BaseModel):
     title: str | None = None
     issuer: str | None = None
@@ -96,6 +115,7 @@ class Experience(BaseModel):
 
 
 class Staff(BaseModel):
+    urn: str | None = None
     search_term: str
     id: str
     name: str | None = None
@@ -112,7 +132,7 @@ class Staff(BaseModel):
     followers: int | None = None
     connections: int | None = None
     mutual_connections: int | None = None
-    is_connection: bool | None = None
+    is_connection: str | None = None  # yes, no, pending
     location: str | None = None
     company: str | None = None
     school: str | None = None
@@ -126,7 +146,9 @@ class Staff(BaseModel):
     skills: list[Skill] | None = None
     experiences: list[Experience] | None = None
     certifications: list[Certification] | None = None
+    contact_info: ContactInfo | None = None
     schools: list[School] | None = None
+    languages: list[str] | None = None
 
     def get_top_skills(self):
         top_three_skills = []
@@ -174,19 +196,21 @@ class Staff(BaseModel):
 
         top_three_companies += [None] * (3 - len(top_three_companies))
         top_three_skills = self.get_top_skills()
-        name = filter(None, [self.first_name, self.last_name])
-
         self.emails_in_bio = extract_emails_from_text(self.bio) if self.bio else None
         self.current_position = (
             sorted_experiences[0].title
             if len(sorted_experiences) > 0 and sorted_experiences[0].end_date is None
             else None
         )
+
+        contact_info = self.contact_info.to_dict() if self.contact_info else {}
         return {
             "search_term": self.search_term,
             "id": self.id,
+            "urn": self.urn,
+            "profile_link": self.profile_link,
             "profile_id": self.profile_id,
-            "name": self.name if self.name else " ".join(name) if name else None,
+            "name": self.name,
             "first_name": self.first_name,
             "last_name": self.last_name,
             "location": self.location,
@@ -227,13 +251,19 @@ class Staff(BaseModel):
                 if self.certifications
                 else None
             ),
+            "languages": self.languages,
             "emails_in_bio": (
                 ", ".join(self.emails_in_bio) if self.emails_in_bio else None
             ),
             "potential_emails": self.potential_emails,
-            "profile_link": self.profile_link,
             "profile_photo": self.profile_photo,
             "banner_photo": self.banner_photo,
+            "connection_created_at": contact_info.get("created_at"),
+            "connection_email": contact_info.get("email_address"),
+            "connection_phone_numbers": contact_info.get("phone_numbers"),
+            "connection_websites": contact_info.get("websites"),
+            "connection_street_address": contact_info.get("address"),
+            "connection_birthday": contact_info.get("birthday"),
         }
 
     def estimate_age_based_on_education(self):

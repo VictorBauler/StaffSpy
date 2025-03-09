@@ -3,6 +3,8 @@ import os
 import pickle
 import re
 from datetime import datetime
+
+import pandas as pd
 from typing import Optional
 from urllib.parse import quote
 
@@ -59,7 +61,7 @@ def get_webdriver(driver_type: Optional[DriverType] = None):
         from selenium.webdriver.firefox.service import Service as FirefoxService
     except ImportError as e:
         raise Exception(
-            "install package `pip install staffspy[browser]` to login with browser"
+            'install package `pip install "staffspy[browser]"` to login with browser'
         )
 
     if driver_type:
@@ -281,7 +283,26 @@ class Login:
                 "X-Li-Track": '{"clientVersion":"1.13.1665"}',
             }
         )
+        if not self.check_logged_in(session):
+            raise Exception(
+                "Failed to log in. Likely outdated session file and cookies have expired. Best practice to delete the file and rerun the LinkedAccount() code"
+            )
         return session
+
+    def check_logged_in(self, session):
+        logger.info("Testing if logged in by checking arbitrary LinkedIn company page")
+        try:
+            res = session.get(
+                "https://www.linkedin.com/voyager/api/organization/companies?q=universalName&universalName=amazon"
+            )
+            if res.status_code != 200:
+                logger.error(f"{res.status_code} status code returned from linkedin")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to get arbitrary company page: {e}")
+            return False
+        logger.info("Account successfully logged in - res code 200")
+        return True
 
 
 def parse_date(date_str):
@@ -353,6 +374,96 @@ def extract_emails_from_text(text: str) -> list[str] | None:
         return None
     email_regex = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
     return email_regex.findall(text)
+
+
+def parse_company_data(json_data, search_term=None):
+    company_info = json_data["elements"][0]
+
+    company_name = company_info.get("name", "")
+    staff_count = company_info.get("staffCount", None)
+    company_type = company_info.get("type", "")
+    description = company_info.get("description", "")
+
+    industries_list = [
+        ind.get("localizedName", "")
+        for ind in company_info.get("companyIndustries", [])
+    ]
+
+    headquarter = company_info.get("headquarter", {})
+    headquarter_full = f'{headquarter.get("line1", "")}, {headquarter.get("city", "")}, {headquarter.get("country", "")} {headquarter.get("postalCode", "")}'
+
+    logo_data = company_info.get("logo", {})
+    vector_image = logo_data.get("image", {}).get("com.linkedin.common.VectorImage", {})
+    root_url = vector_image.get("rootUrl", "")
+    artifacts = vector_image.get("artifacts", [])
+
+    logo_url = None
+    if artifacts:
+        first_artifact = artifacts[0]
+        file_path = first_artifact.get("fileIdentifyingUrlPathSegment", "")
+        logo_url = root_url + file_path
+
+    tracking_info = company_info.get("trackingInfo", {})
+    object_urn = tracking_info.get("objectUrn", "")
+    internal_id = None
+    if object_urn.startswith("urn:li:company:"):
+        internal_id = object_urn.split(":")[-1]
+
+    bg_photo = company_info.get("backgroundCoverPhoto", {})
+    vector_image = bg_photo.get("com.linkedin.common.VectorImage", {})
+    root_url = vector_image.get("rootUrl", "")
+    artifacts = vector_image.get("artifacts", [])
+    banner_url = None
+    if artifacts:
+        chosen_artifact = artifacts[0]
+        file_segment = chosen_artifact.get("fileIdentifyingUrlPathSegment", "")
+        banner_url = root_url + file_segment
+
+    company_df = pd.DataFrame(
+        {
+            "search_term": [search_term],
+            "linkedin_company_id": [internal_id],
+            "company_name": [company_name],
+            "staff_count": [staff_count],
+            "company_type": [company_type],
+            "industries": [industries_list],
+            "headquarters_address": [headquarter_full],
+            "description": [description],
+            "logo_url": [logo_url],
+            "banner_url": [banner_url],
+        }
+    )
+    return company_df
+
+
+def clean_df(staff_df):
+    if "estimated_age" in staff_df.columns:
+        staff_df["estimated_age"] = staff_df["estimated_age"].astype("Int64")
+    if "followers" in staff_df.columns:
+        staff_df["followers"] = staff_df["followers"].astype("Int64")
+    if "connections" in staff_df.columns:
+        staff_df["connections"] = staff_df["connections"].astype("Int64")
+    if "mutuals" in staff_df.columns:
+        staff_df["mutuals"] = staff_df["mutuals"].astype("Int64")
+    return staff_df
+
+
+def upload_to_clay(webhook_url: str, data: pd.DataFrame):
+    records = data.to_dict("records")
+
+    responses = []
+    for i, row in enumerate(records, start=1):
+        try:
+            response = requests.post(
+                webhook_url, headers={"Accept": "application/json"}, json=row
+            )
+            response.raise_for_status()
+            logger.info(f"Uploaded row to Clay: {i} / {len(records)}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to upload row to Clay: {str(e)}")
+            responses.append({"error": str(e), "data": row})
+
+    return responses
 
 
 if __name__ == "__main__":
